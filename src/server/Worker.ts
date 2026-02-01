@@ -30,6 +30,7 @@ import { MapPlaylist } from "./MapPlaylist";
 import { startPolling } from "./PollingLoop";
 import { PrivilegeRefresher } from "./PrivilegeRefresher";
 import { verifyTurnstileToken } from "./Turnstile";
+import { WorkerLobbyService } from "./WorkerLobbyService";
 import { initWorkerMetrics } from "./WorkerMetrics";
 
 const config = getServerConfigFromServer();
@@ -42,21 +43,24 @@ const playlist = new MapPlaylist(true);
 export async function startWorker() {
   log.info(`Worker starting...`);
 
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+
+  const app = express();
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ noServer: true });
+
+  const gm = new GameManager(config, log);
+
+  // Initialize lobby service (handles WebSocket upgrade routing)
+  const lobbyService = new WorkerLobbyService(server, wss, gm, log);
+
   setTimeout(
     () => {
       startMatchmakingPolling(gm);
     },
     1000 + Math.random() * 2000,
   );
-
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-
-  const app = express();
-  const server = http.createServer(app);
-  const wss = new WebSocketServer({ server });
-
-  const gm = new GameManager(config, log);
 
   if (config.otelEnabled()) {
     initWorkerMetrics(gm);
@@ -65,6 +69,8 @@ export async function startWorker() {
   const privilegeRefresher = new PrivilegeRefresher(
     config.jwtIssuer() + "/cosmetics.json",
     log,
+    undefined,
+    config.env(),
   );
   privilegeRefresher.start();
 
@@ -459,13 +465,8 @@ export async function startWorker() {
     log.info(`running on http://localhost:${PORT}`);
     log.info(`Handling requests with path prefix /w${workerId}/`);
     // Signal to the master process that this worker is ready
-    if (process.send) {
-      process.send({
-        type: "WORKER_READY",
-        workerId: workerId,
-      });
-      log.info(`signaled ready state to master`);
-    }
+    lobbyService.sendReady(workerId);
+    log.info(`signaled ready state to master`);
   });
 
   // Global error handler
@@ -534,7 +535,9 @@ async function startMatchmakingPolling(gm: GameManager) {
           }, 5000);
         }
       } catch (error) {
-        log.error(`Error polling lobby:`, error);
+        if (config.env() !== GameEnv.Dev) {
+          log.error(`Error polling matchmaking:`, error);
+        }
       }
     },
     5000 + Math.random() * 1000,

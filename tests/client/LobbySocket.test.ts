@@ -1,3 +1,4 @@
+import { PublicGames } from "src/core/Schemas";
 import { PublicLobbySocket } from "../../src/client/LobbySocket";
 
 class MockWebSocket extends EventTarget {
@@ -47,8 +48,8 @@ describe("PublicLobbySocket", () => {
   });
 
   it("delivers lobby updates from websocket messages", () => {
-    const updates: unknown[][] = [];
-    const socket = new PublicLobbySocket((lobbies) => updates.push(lobbies));
+    const updates: PublicGames[] = [];
+    const socket = new PublicLobbySocket((data) => updates.push(data));
 
     socket.start();
     const ws = MockWebSocket.instances.at(-1);
@@ -58,25 +59,24 @@ describe("PublicLobbySocket", () => {
       new MessageEvent("message", {
         data: JSON.stringify({
           type: "lobbies_update",
-          data: {
-            lobbies: [
-              {
-                gameID: "g1",
-                numClients: 1,
-                gameConfig: {
-                  maxPlayers: 2,
-                  gameMode: 0,
-                  gameMap: "Earth",
-                },
+          data: [
+            {
+              gameID: "g1",
+              numClients: 1,
+              serverTime: Date.now(),
+              gameConfig: {
+                maxPlayers: 2,
+                gameMode: 0,
+                gameMap: "Earth",
               },
-            ],
-          },
+            },
+          ],
         }),
       }),
     );
 
     expect(updates).toHaveLength(1);
-    expect((updates[0][0] as { gameID: string }).gameID).toBe("g1");
+    expect(updates[0].games[0].gameID).toBe("g1");
 
     socket.stop();
   });
@@ -86,7 +86,7 @@ describe("PublicLobbySocket", () => {
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ lobbies: [] }),
+      json: async () => [],
     });
 
     globalThis.fetch = fetchMock as unknown as typeof fetch;

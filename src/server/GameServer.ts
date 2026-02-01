@@ -762,9 +762,10 @@ export class GameServer {
         clientID: c.clientID,
       })),
       gameConfig: this.gameConfig,
-      msUntilStart: this.isPublic()
+      startsAt: this.isPublic()
         ? this.createdAt + this.config.gameCreationRate()
         : undefined,
+      serverTime: Date.now(),
     };
   }
 

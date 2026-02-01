@@ -26,6 +26,12 @@ export class GameManager {
     return this.games.get(id) ?? null;
   }
 
+  public publicLobbies(): GameServer[] {
+    return Array.from(this.games.values()).filter(
+      (g) => g.phase() === GamePhase.Lobby && g.isPublic(),
+    );
+  }
+
   joinClient(client: Client, gameID: GameID): boolean {
     const game = this.games.get(gameID);
     if (game) {

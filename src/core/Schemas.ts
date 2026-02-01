@@ -131,6 +131,9 @@ export type PlayerPattern = z.infer<typeof PlayerPatternSchema>;
 export type PlayerColor = z.infer<typeof PlayerColorSchema>;
 export type Flag = z.infer<typeof FlagSchema>;
 export type GameStartInfo = z.infer<typeof GameStartInfoSchema>;
+export type GameInfo = z.infer<typeof GameInfoSchema>;
+export type PublicGames = z.infer<typeof PublicGamesSchema>;
+export type PublicGameInfo = z.infer<typeof PublicGameInfoSchema>;
 
 const ClientInfoSchema = z.object({
   clientID: z.string(),
@@ -140,18 +143,23 @@ const ClientInfoSchema = z.object({
 export const GameInfoSchema = z.object({
   gameID: z.string(),
   clients: z.array(ClientInfoSchema).optional(),
-  numClients: z.number().optional(),
-  msUntilStart: z.number().optional(),
+  startsAt: z.number().optional(),
+  serverTime: z.number(),
   gameConfig: z.lazy(() => GameConfigSchema).optional(),
 });
 
-export interface GameInfo {
-  gameID: GameID;
-  clients?: ClientInfo[];
-  numClients?: number;
-  msUntilStart?: number;
-  gameConfig?: GameConfig;
-}
+export const PublicGameInfoSchema = z.object({
+  gameID: z.string(),
+  numClients: z.number(),
+  startsAt: z.number(),
+  gameConfig: z.lazy(() => GameConfigSchema).optional(),
+});
+
+export const PublicGamesSchema = z.object({
+  serverTime: z.number(),
+  games: PublicGameInfoSchema.array(),
+});
+
 export interface ClientInfo {
   clientID: ClientID;
   username: string;

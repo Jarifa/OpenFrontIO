@@ -10,7 +10,7 @@ import {
   Quads,
   Trios,
 } from "../core/game/Game";
-import { GameID, GameInfo } from "../core/Schemas";
+import { GameID, PublicGameInfo, PublicGames } from "../core/Schemas";
 import { generateID } from "../core/Util";
 import { PublicLobbySocket } from "./LobbySocket";
 import { JoinLobbyEvent } from "./Main";
@@ -18,18 +18,19 @@ import { terrainMapFileLoader } from "./TerrainMapFileLoader";
 
 @customElement("public-lobby")
 export class PublicLobby extends LitElement {
-  @state() private lobbies: GameInfo[] = [];
+  @state() private publicGames: PublicGames | null = null;
   @state() public isLobbyHighlighted: boolean = false;
   @state() private isButtonDebounced: boolean = false;
   @state() private mapImages: Map<GameID, string> = new Map();
   @state() private joiningDotIndex: number = 0;
 
   private joiningInterval: number | null = null;
-  private currLobby: GameInfo | null = null;
+  private currLobby: PublicGameInfo | null = null;
   private debounceDelay: number = 150;
   private lobbyIDToStart = new Map<GameID, number>();
-  private lobbySocket = new PublicLobbySocket((lobbies) =>
-    this.handleLobbiesUpdate(lobbies),
+  private serverTimeOffset = 0;
+  private lobbySocket = new PublicLobbySocket((data) =>
+    this.handleLobbiesUpdate(data),
   );
 
   createRenderRoot() {
@@ -47,12 +48,18 @@ export class PublicLobby extends LitElement {
     this.stopJoiningAnimation();
   }
 
-  private handleLobbiesUpdate(lobbies: GameInfo[]) {
-    this.lobbies = lobbies;
-    this.lobbies.forEach((l) => {
+  private handleLobbiesUpdate(publicGames: PublicGames) {
+    this.publicGames = publicGames;
+
+    // Calculate offset between server time and client time
+    if (this.publicGames) {
+      this.serverTimeOffset = this.publicGames.serverTime - Date.now();
+    }
+    this.publicGames.games.forEach((l) => {
       if (!this.lobbyIDToStart.has(l.gameID)) {
-        const msUntilStart = l.msUntilStart ?? 0;
-        this.lobbyIDToStart.set(l.gameID, msUntilStart + Date.now());
+        // Convert server's startsAt to client time by subtracting offset
+        const startsAt = l.startsAt ?? Date.now();
+        this.lobbyIDToStart.set(l.gameID, startsAt - this.serverTimeOffset);
       }
 
       if (l.gameConfig && !this.mapImages.has(l.gameID)) {
@@ -74,9 +81,9 @@ export class PublicLobby extends LitElement {
   }
 
   render() {
-    if (this.lobbies.length === 0) return html``;
+    if (!this.publicGames) return html``;
 
-    const lobby = this.lobbies[0];
+    const lobby = this.publicGames.games[0];
     if (!lobby?.gameConfig) return html``;
 
     const start = this.lobbyIDToStart.get(lobby.gameID) ?? 0;
@@ -380,7 +387,7 @@ export class PublicLobby extends LitElement {
     return labels;
   }
 
-  private lobbyClicked(lobby: GameInfo) {
+  private lobbyClicked(lobby: PublicGameInfo) {
     if (this.isButtonDebounced) return;
 
     this.isButtonDebounced = true;
