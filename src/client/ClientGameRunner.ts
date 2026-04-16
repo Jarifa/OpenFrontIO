@@ -54,7 +54,7 @@ import {
 import { createCanvas } from "./Utils";
 import { createRenderer, GameRenderer } from "./graphics/GameRenderer";
 import { GoToPlayerEvent } from "./graphics/layers/Leaderboard";
-import SoundManager from "./sound/SoundManager";
+import { SoundManager } from "./sound/SoundManager";
 
 export interface LobbyConfig {
   serverConfig: ServerConfig;
@@ -206,8 +206,12 @@ export function joinLobby(
         return false;
       }
       console.log("leaving game");
-      currentGameRunner = null;
-      transport.leaveGame();
+      if (currentGameRunner) {
+        currentGameRunner.stop();
+        currentGameRunner = null;
+      } else {
+        transport.leaveGame();
+      }
       return true;
     },
     prestart: prestartPromise,
@@ -257,22 +261,29 @@ async function createClientGame(
   );
 
   const canvas = createCanvas();
-  const gameRenderer = createRenderer(canvas, gameView, eventBus);
+  const soundManager = new SoundManager(eventBus, userSettings);
+  try {
+    const gameRenderer = createRenderer(canvas, gameView, eventBus);
 
-  console.log(
-    `creating private game got difficulty: ${lobbyConfig.gameStartInfo.config.difficulty}`,
-  );
+    console.log(
+      `creating private game got difficulty: ${lobbyConfig.gameStartInfo.config.difficulty}`,
+    );
 
-  return new ClientGameRunner(
-    lobbyConfig,
-    clientID,
-    eventBus,
-    gameRenderer,
-    new InputHandler(gameRenderer.uiState, canvas, eventBus),
-    transport,
-    worker,
-    gameView,
-  );
+    return new ClientGameRunner(
+      lobbyConfig,
+      clientID,
+      eventBus,
+      gameRenderer,
+      new InputHandler(gameView, gameRenderer.uiState, canvas, eventBus),
+      transport,
+      worker,
+      gameView,
+      soundManager,
+    );
+  } catch (err) {
+    soundManager.dispose();
+    throw err;
+  }
 }
 
 export class ClientGameRunner {
@@ -298,6 +309,7 @@ export class ClientGameRunner {
     private transport: Transport,
     private worker: WorkerClient,
     private gameView: GameView,
+    private soundManager: SoundManager,
   ) {
     this.lastMessageTime = Date.now();
   }
@@ -350,7 +362,7 @@ export class ClientGameRunner {
   }
 
   public start() {
-    SoundManager.playBackgroundMusic();
+    this.soundManager.playBackgroundMusic();
     console.log("starting client game");
 
     this.isActive = true;
@@ -536,7 +548,7 @@ export class ClientGameRunner {
   }
 
   public stop() {
-    SoundManager.stopBackgroundMusic();
+    this.soundManager.dispose();
     if (!this.isActive) return;
 
     this.isActive = false;
